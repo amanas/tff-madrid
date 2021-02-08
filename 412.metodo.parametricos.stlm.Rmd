@@ -1,0 +1,127 @@
+
+```{r, include = FALSE}
+require(TFFutils)
+require(magrittr)
+require(forecast)
+require(ggplot2)
+require(xts)
+require(padr)
+require(gridExtra)
+require(imputeTS)
+require(png)
+require(grid)
+require(data.table)
+require(dplyr)
+
+tff.setup.knitr()
+tff.setup.pander()
+knitr::opts_chunk$set(fig.width=8, fig.height=6, out.width='80%', fig.align='center')
+```
+
+## Método MSTL - STL multiestacional
+
+En series como las del flujo de tráfico es natural observar que las estacionalidades son varias: 
+
+* **diaria**, pues no a todas horas el flujo es igual.
+* **semanal**, ya que según el día de la semana es normal que el tráfico fluya más o menos y en distintas regiones.
+* **anual**, puesto que los periodos vacacionales, por ejemplo, claramente condicionan los flujos de tráfico.
+
+Puede también considerarse una estacionalidad mensual, pero en el caso de los algoritmos STL y de nuestras series, no parece que ayude mucho, como hemos comentado en el punto anterior.
+
+El paquete *forecast* de *R* ofrece una extensión del algoritmo STL con la que se puede aplicar pronósticos a series que presentan estacionalidad múltiple, cómo es el caso de nuestras series de estudio.
+
+El algoritmo **MSTL** nuevamente descompone la serie en tendencia, estacionalidad y ruido. Sin embargo, en este caso en lugar de modelar una única estacionalidad, construye un modelo basado en tantas como indiquemos que tiene nuestra serie (series multi-estacionales). Las componentes estacionales se estiman de forma iterativa utilizando *STL*.  La componente de tendencia se calcula en la última iteración de STL. En el caso de que las series fueran no estacionales, este método las descompone en tendencia y resto solamente. A diferencia de stl, en el paquete *forecast* mstl está completamente automatizado, lo cual significa que la estimación de los metaparámetros óptimos la realiza el propio algoritmo.
+
+```{r}
+data.4000 <- tff.get.parsed.metrics(d = 4000) %>% tff.clean %>% tff.pad %>% na.interpolation %>% 
+    .[,c("fecha","carga")] %>% head(nrow(.) - 4*24*3) # le quito 3 dias para que caiga en viernes
+pool::poolClose(tff.get.conn())
+
+d <- 4*24
+w <- d*7
+m <- d*365.25/12
+y <- d*365.25
+
+model <- data.4000 %>% tail(5000) %>% tff.as.msts(c(d,w)) %>% stlm(s.window = "periodic") 
+```
+
+Podemos ver un ejemplo de descomposición multiestacional en la Figura \@ref(fig:stlm-ex).
+
+
+```{r stlm-ex, fig.cap="Ejemplo de descomposición multiestacional: dispositivo 4.000, últimos 5.000 valores reportados, estacionalidades diaria y semanal"}
+colnames(model$stl) <- c("Data", "Trend", "Daily season", "Weekly season", "Remainder")
+model$stl %>% 
+    autoplot(main = "Descomposición multi-estacional")  + 
+  xlab('i-ésimo día') +  ylab('% carga')
+```
+
+Se han realizado el experimentos con estacionalidades *diaria + semanal*, *diaria + semanal + mensual*, *diaria + semanal + anual* y *diaria + semanal + mensual + anual* para todas las series de dispositivos de medida. Puede verse el resultado de uno de los experimentos para los datos reportados por el dispositivo 4.000 desde 2015 en la Figura \@ref(fig:stlm-4000-ex).
+
+
+```{r} 
+fit.mstl.dw <- data.4000 %>% 
+    tff.fit(function(train) train %>% tff.as.msts(c(d,w)) %>% stlm(s.window = "periodic"), test.size = 4*48)
+fit.mstl.dw.tail <- data.4000 %>% tail(20000) %>% 
+    tff.fit(function(train) train  %>% tff.as.msts(c(d,w)) %>% mstl(s.window = "periodic"), test.size = 4*48)
+
+fit.mstl.dwm <- data.4000 %>% 
+    tff.fit(function(train) train %>% tff.as.msts(c(d,w,m)) %>% stlm(s.window = "periodic"), test.size = 4*48)
+fit.mstl.dwm.tail <- data.4000 %>% tail(20000) %>% 
+    tff.fit(function(train) train  %>% tff.as.msts(c(d,w,m)) %>% mstl(s.window = "periodic"), test.size = 4*48)
+
+fit.mstl.dwy <- data.4000 %>% 
+    tff.fit(function(train) train %>% tff.as.msts(c(d,w,y)) %>% stlm(s.window = "periodic"), test.size = 4*48)
+fit.mstl.dwy.tail <- data.4000 %>% tail(20000) %>% 
+    tff.fit(function(train) train  %>% tff.as.msts(c(d,w,y)) %>% mstl(s.window = "periodic"), test.size = 4*48)
+
+fit.mstl.dwmy <- data.4000 %>% 
+    tff.fit(function(train) train %>% tff.as.msts(c(d,w,m,y)) %>% stlm(s.window = "periodic"), test.size = 4*48)
+fit.mstl.dwmy.tail <- data.4000 %>% tail(20000) %>% 
+    tff.fit(function(train) train  %>% tff.as.msts(c(d,w,m,y)) %>% mstl(s.window = "periodic"), test.size = 4*48)
+```
+ 
+ 
+ 
+
+```{r stlm-4000-ex, fig.height=11, fig.width=9, out.width="100%", fig.cap="Ejemplo de pronósticos a 48 horas vista con el algoritmo MSTL para la serie reportada por el dispositivo 4.000 utilizando combinaciones de estacionalidad diaria, semanal, mensual o anual, considerando toda la serie o sólamente los 20.000 valores más recientes de la misma"}
+
+grid.arrange (tff.plot.fit(fit.mstl.dw, include = 4*48*2) + ggtitle('Diaria y semanal'),
+              tff.plot.fit(fit.mstl.dw.tail, include = 4*48*2) + ggtitle('Diaria y semanal (reciente)'),
+              tff.plot.fit(fit.mstl.dwm, include = 4*48*2) + ggtitle('Diaria, semanal y mensual'),
+              tff.plot.fit(fit.mstl.dwm.tail, include = 4*48*2) + ggtitle('Diaria, semanal y mensual (reciente)'),
+              tff.plot.fit(fit.mstl.dwy, include = 4*48*2) + ggtitle('Diaria, semanal y anual'),
+              tff.plot.fit(fit.mstl.dwy.tail, include = 4*48*2) + ggtitle('Diaria, semanal y anual (reciente)'),
+              tff.plot.fit(fit.mstl.dwmy, include = 4*48*2) + ggtitle('Diaria, semanal, mensual y anual'),
+              tff.plot.fit(fit.mstl.dwmy.tail, include = 4*48*2) + ggtitle('Diaria, semanal, mensual y anual (reciente)'),
+              ncol = 2) # then we could save it as a png
+```
+
+Visualmente vemos que los resultados son muy prometedores. Pero no es fácil determinar qué combinación de estacionalidades puede ser la más productiva.
+
+<!-- En el Cuadro \@ref(tab:stlm-vs-stl-acc) podemos observar los rendimientos de pronóstico, con unos experimentos que se han realizado sobre varias series en varios puntos de prueba. Vemos que los resultados considerando estacionalidades diara y semanal son siempre buenos. E incluso pueden mejorar si se añade además estacionalidad anual. -->
+
+<!-- ```{r stlm-vs-stl-acc} -->
+<!-- get.acc.summary <- function(fits) { -->
+<!--   fits %>% lapply(tff.accuracy.fit) %>%  -->
+<!--     lapply(as.data.frame) %>% lapply(setDT, keep.rownames = T) %>%  -->
+<!--     rbindlist() %>% rename(Set = rn) %>%  -->
+<!--     group_by(Set) %>% summarise_all(mean, na.rm = T) -->
+<!-- } -->
+
+<!-- acc.stlm.dw   <- fits.stlm.dw %>% get.acc.summary %>% filter(Set == "Test set") -->
+<!-- acc.stlm.dwm  <- fits.stlm.dwm %>% get.acc.summary %>% filter(Set == "Test set") -->
+<!-- acc.stlm.dwy  <- fits.stlm.dwy %>% get.acc.summary %>% filter(Set == "Test set") -->
+<!-- acc.stlm.dwmy <- fits.stlm.dwmy %>% get.acc.summary %>% filter(Set == "Test set") -->
+
+<!-- rbind("MSTL diaria + semanal" = acc.stlm.dw,  -->
+<!--       "MSTL diaria + semanal + mensual" = acc.stlm.dwm,  -->
+<!--       "MSTL diaria + semanal + anual" = acc.stlm.dwy,  -->
+<!--       "MSTL diaria + semanal + mendual + anual" = acc.stlm.dwmy) %>% select(-c(Set)) %>%  -->
+<!--   tff.kable.scaled(digits = 2, -->
+<!--                    caption = "Errores medios del método MSTL con diferentes estacionalidades y combinaciones de ellas") -->
+<!-- ``` -->
+
+
+Más adelante, en el apartado de resultados de este capítulo, veremos cómo se comporta este método comparado con STL aplicado a todas las series que forman parte de este estudio.
+
+

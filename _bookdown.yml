@@ -1,0 +1,24 @@
+book_filename: "tff-madrid"
+delete_merged_file: true
+new_session: true
+# rmd_files: ["index.Rmd","200.estado.del.arte.Rmd"]
+
+language:
+  label:
+    fig: 'Figura '
+    tab: 'Cuadro '
+    eq: 'Equation '
+    thm: 'Theorem '
+    lem: 'Lemma '
+    cor: 'Corollary '
+    prp: 'Proposition '
+    cnj: 'Conjecture '
+    def: 'Definition '
+    exm: 'Example '
+    exr: 'Exercise '
+    proof: 'Proof. '
+    remark: 'Remark. '
+    solution: 'Solution. '
+  ui:
+    edit: Edit
+    chapter_name: "Capítulo "

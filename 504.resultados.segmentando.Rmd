@@ -1,0 +1,163 @@
+
+
+```{r, include=F}
+require(TFFutils)
+require(magrittr)
+require(DBI)
+require(RMySQL)
+require(padr)
+require(imputeTS)
+require(keras)
+require(xts)
+require(ggplot2)
+require(reshape2)
+require(tidyr)
+require(broom)
+require(lubridate)
+require(forecast)
+require(jsonlite)
+require(data.table)
+require(dplyr)
+require(gridExtra) 
+require(grid) 
+require(parallel)
+require(kableExtra)
+tff.setup.knitr()
+tff.setup.pander()
+
+knitr::opts_chunk$set(fig.align='center')
+```
+ 
+ 
+
+
+```{r, include=FALSE}
+
+tff.release.pool()
+
+gaps <- tff.get.conn() %>% dbGetQuery("select * from carga_gaps") 
+
+horizons <- c(1,4,12,24,48)*4
+
+top.Nombres <- c("SARIMA", "LSTM Agg4 Scale SD", "LSTM-Exo DH Raw Scale Mean", 
+                 "STL+LSTM Agg5 Scale Mean", "STL W Reciente", "STLM DWM Reciente")
+
+accs.top <- tff.get.accs.top(exps, top.Nombres)
+```
+
+
+
+## Resultados segmentando por porcentaje de fallas en los datos
+
+
+Sin embargo, como vimos en el apartado de relativo a los datos, los dispositivos no siempre reportan correctamente los datos. Es decir, hay fallas en el reporte a lo largo del tiempo, que en algunos casos son bastante significativas. 
+
+Para el correcto funcionamiento de los algoritmos es imperativo que la serie no tenga fallas en los datos. Para sobreponerse a este problema, en la mayoría de los casos se ha acudido a técnicas de interpolación para reparar los datos faltantes. Es fácil comprender que este tipo de técnicas pueden comprometer los resultados en la medida en la que el modelo en cuestión se educa con datos "ficticios" que pueden introducir sesgos. 
+
+Por eso, en el contraste de resultados, consideramos importante distinguir la capacidad de pronóstico segmentando también por la calidad de los datos reportados por los dispositivos.
+
+Para proceder de este modo, filtramos las métricas obtenidas en los puntos anteriores quedándonos sólo con aquellos experimentos que se ha realizado sobre series que no superan ciertos umbrales de fallas y sobre esto calculamos agregados de errores.
+
+Podemos ver los resultados para series con porcentaje de fallas inferior a 5% en el Cuadro \@ref(tab:accs-five-RMSE-MAPE) y en la Figura \@ref(fig:accs-five-RMSE-MAPE-fig).
+
+
+
+```{r accs-five-RMSE-MAPE, fig.pos='H'}
+accs.top.gap5.sum <- accs.top %>% 
+    filter(Device %in% (gaps %>% filter(percentageNAs<5) %>% .$device %>% unique), Horizonte %in% horizons) %>% 
+    select(-c(Device)) %>% 
+    group_by(Nombre,Horizonte) %>% summarise_all(mean, na.rm=T)
+
+errs.top.gap5 <- cbind(accs.top.gap5.sum %>% select(Nombre, Horizonte, RMSE) %>%  spread(Horizonte,RMSE) %>% arrange(Nombre),
+                       accs.top.gap5.sum %>% select(Nombre, Horizonte, MAPE) %>%  spread(Horizonte,MAPE) %>% arrange(Nombre))[,-c(7)] %>%
+        arrange(`192`)
+colnames(errs.top.gap5) <- c("Nombre",rep(paste(horizons/4,"horas"),2))
+    
+errs.top.gap5 %>% 
+    tff.kable.scaled(., digits = 2, 
+    caption = "RMSE y MAPE para el mejor método de cada familia evaluado en series con porcentaje de fallas en los datos inferior al 5\\%") %>% 
+    add_header_above(c(" " = 1, "RMSE" = 5, "MAPE" = 5)) 
+```
+ 
+
+ 
+```{r accs-five-RMSE-MAPE-fig, fig.width = 8, fig.height = 8, out.width="100%", fig.cap="Gráfica de errores cometidos por los mejores métodos por familia evaluados en series con porcentaje de fallas inferior al 5\\%", fig.pos='H'}
+accs.top.gaps5.sum <- accs.top %>% 
+    filter(Device %in% (gaps %>% filter(percentageNAs<5) %>% .$device %>% unique)) %>%
+    select(-c(Device)) %>% 
+    group_by(Nombre,Horizonte) %>% summarise_all(mean, na.rm=T)
+grid.arrange(grobs = list(ggplot(accs.top.gaps5.sum) + geom_line(aes(Horizonte, RMSE, group=Nombre, colour=Nombre)) + 
+                              ggtitle(paste("RMSE para diferentes horizontes")) + xlab("Horizonte") + ylab("RMSE"),
+                          ggplot(accs.top.gaps5.sum) + geom_line(aes(Horizonte, MAPE, group=Nombre, colour=Nombre)) + 
+                              ggtitle(paste("MAPE para diferentes horizontes")) + xlab("Horizonte") + ylab("MAPE")), 
+             top = "", 
+             nrow = 2)
+
+```
+
+Podemos observar que nuevamente los resultados del algoritmo STL considerando solo la subserie reciente son los mejores para pronósticos cercanos en el tiempo. Siendo el método LSTM Exógeno el que brinda mejores resultados para pronósticos más lejanos en el tiempo.
+
+
+
+En la Figura \@ref(fig:hist-errores) podemos ver la forma como se distribuyen los errores cometidos por los mejores métodos por familia a 48 horas vista. Observamos como las distribuciones que presentan los distintos métodos son bastante similares entre sí. Así mismo, al ser distribuciones unimodales, no parece que haya ningún método que difiera en comportamiento en diferentes conjuntos de series, más allá de la calidad de los datos. 
+
+En relación a la calidad de los datos, vemos como los métodos diferentes de SARIMA y LSTM Agg4 Scale SD, en sus predicciones a 48 horas vista, se ven perjudicados cuando sólo se tienen en cuenta aquellas series con escaso porcentaje de fallas. O visto de otro modo, el resto de métodos distintos de estos dos parecen comportarse peor ante series con datos deficientes.
+
+
+```{r hist-errores, fig.cap="Distribución de los errores cometidos por método en pronósticos a 48 horas vista", fig.width = 12, fig.height = 4, out.width="100%", fig.pos='H'} 
+g.err.all <- accs.top %>% 
+  filter(Horizonte==192) %>%  
+  ggplot() +
+    geom_density(aes(RMSE, stat(count), col=Nombre)) + 
+    labs(title = "Distribución de errores por método \nconsiderando todas las series",
+       x = "RMSE a 48 horas vista",
+       y = "Experimentos") 
+g.err.top <- accs.top %>% 
+  filter(Horizonte==192) %>%  
+  filter(Device %in% (gaps %>% filter(percentageNAs<5) %>% .$device %>% unique)) %>% 
+  ggplot() +
+  geom_density(aes(RMSE, stat(count), col=Nombre)) + 
+  labs(title = "Distribución de errores por método \nconsiderando series con porcentaje de fallos inferior a 5%",
+       x = "RMSE a 48 horas vista",
+       y = "Experimentos")
+
+grid.arrange(grobs = list(g.err.all, g.err.top), top = "", ncol = 2)
+```
+
+
+
+
+## Reproductibilidad
+
+Este trabajo y todos los experimentos en él descritos han sido realizados de una u otra manera con el lenguaje de programación R y con los distintos frameworks para creación de textos científicos que ofrece. En particular, ha sido de gran utilidad la librería *bookdown* [@R-bookdown]. Todos los experimentos pueden reproducirse ejecutando el código que se expone de manera pública en Github  [@amanas-github].
+
+Los datos descargados y procesados se han guardado en una base de datos MySQL alojada en [AWS](https://aws.amazon.com/) utilizando el servicio de base de datos en la nube [RDS](https://aws.amazon.com/es/rds/). Se ha guardado además el detalle de todos los experimentos realizados, con las medidas de error asociadas a cada experimento y la subserie pronosticada y esperada. Está prevista la exposición de manera pública de los archivos que permitan recrear la base de datos, facilitando así la continuidad de esta investigación por quien estuviera interesado. Los ficheros se alojarán en el servicio de almacenamiento masivo  [S3](https://aws.amazon.com/es/s3/) de Amazon y la url pública de acceso a los mismos se expondrá en el repositorio Github que mencionábamos más arriba.
+
+Finalmente, para la elaboración de este documento nos hemos servido de tres proyectos con RStudio: 
+
+- Uno con las funciones de utilidad e implementaciones de los experimentos realizados.
+
+- Otro, a modo de espacio de trabajo para pruebas de concepto, dónde se han ido elaborando uno a uno los distintos apartados de este documento, a modo de *Notebook de R* con *Rmarkdown* [@R-rmarkdown].
+
+- Y por último, un tercer proyecto en dónde se han ido consolidando los distintos apartados utilizando el framework *bookdown* [@R-bookdown].
+
+Como decimos más arriba, todo este material quedará expuesto de manera pública en [@amanas-github]. Durante el desarrollo del trabajo, para dotarnos de privacidad, se han hospedado los repositorios de código y documentos en [Bitbucket](https://bitbucket.org), también basado en el sistema de control de versiones [git](https://git-scm.com/).
+
+De suma importancia ha sido también la máquina [ndowe](http://ndowe.ia.uned.es:8787/) que la UNED pone a disposición de sus alumnos como ayuda para el desarrollo de este tipo de trabajos. La cantidad de computación que se ha necesitado para estos experimentos hubiera supuesto un gasto prohibitivo en cualquier proveedor de servicio en la nube y unos tiempos de ejecución enormes en una máquina doméstica.
+
+
+A modo de resumen:
+
+- Se han utilizado más de 40 librerías del lenguaje R.
+
+- Se han realizado más de 280 commits de git (consolidaciones de código).
+
+- Se han generado más de 2.079 líneas de código para funciones de utilidad y ayuda.
+
+- Se ha necesitado de más de 2.000 horas de computación para la realización de los experimentos.
+
+
+
+
+
+

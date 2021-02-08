@@ -1,0 +1,91 @@
+
+```{r, include=F}
+require(TFFutils)
+require(magrittr)
+require(DBI)
+require(RMySQL)
+require(padr)
+require(imputeTS)
+require(keras)
+require(xts)
+require(ggplot2)
+require(reshape2)
+require(tidyr)
+require(broom)
+require(lubridate)
+require(forecast)
+require(jsonlite)
+require(data.table)
+require(dplyr)
+require(gridExtra) 
+require(grid) 
+require(parallel)
+require(kableExtra)
+tff.setup.knitr()
+tff.setup.pander()
+
+knitr::opts_chunk$set(fig.align='center')
+```
+ 
+ 
+
+## Métricas de error
+
+
+Un mismo pronóstico puede compararse con el valor real esperado atendiendo a diferentes medidas de error. 
+
+Un "error" de pronóstico es la diferencia entre un valor observado y su pronóstico. Es decir, "error" no significa un mal funcionamiento, significa la parte impredecible de una observación. Se puede escribir como:
+
+$$e_T = y_T - \hat{y}_T$$ 
+
+dónde $\{ y_1, \dots, y_t \}, t \in T$, se refieren a los datos observados y $\{ \hat{y}_1, \dots, \hat{y}_t \}, t \in T$, son los datos pronosticados.
+
+
+A priori, no tiene por qué haber una medida del error que sea mejor que otra; para cada caso, dependiendo de la naturaleza del fenómeno que se pronostica, puede convenir utilizar unas u otras métricas, teniendo siempre claro como interpretar la información arrojada por cada una. 
+
+Sin embargo, si conviene aclarar la diferencia que hay entre métricas dependientes de la escala y métricas agnósticas de escala. Acudimos nuevamente a [@Forecast6-online].
+
+**Las medidas de error dependientes de la escala** son aquellas en las que las mediciones de los errores de pronóstico están en la misma escala que los datos que se pronostican. El principal inconveniente de este tipo de medida es que no se pueden usar para hacer comparaciones entre series que involucran diferentes unidades o series que utilizando la misma unidad tienen unos datos muy diferentes. Por ejemplo, si en una vía la media de carga es del 50% con una varianza del 50% y en otra es sólo del 2% con una varianza del 5%, si un método de pronóstico tuviera un error $\epsilon$ en ambas series, parece que podríamos pensar que el método modela mejor la vía con mayor carga puesto que la magnitud y variabilidad de los datos es mayor.
+
+Las dos medidas dependientes de la escala más utilizadas se basan en los errores absolutos (MAE) o los errores cuadrados (RMSE). Cuando se comparan los métodos de pronóstico aplicados a una sola serie de tiempo, o a varias series de tiempo con las mismas unidades, el MAE es popular porque es fácil de entender y calcular. Un método de pronóstico que minimiza el MAE conduce a pronósticos de la mediana, mientras que minimizar el RMSE conduce a pronósticos de la media. En consecuencia, el RMSE también se usa ampliamente, a pesar de ser más difícil de interpretar. Más adelante veremos como se definen formalmente.
+
+**Las medidas de error agnósticas de escala** típicamente se expresan como porcentajes. Los errores de porcentaje tienen la ventaja de estar libres de unidades, por lo que se usan con frecuencia para comparar los rendimientos de pronóstico entre diferentes conjuntos de datos. En el caso de nuestra investigación, esto es bastante importante al ser bastante heterogéneo la distribución que adopta la carga según el dispositivo (véanse las observaciones hechas más arriba sobre medidas dependientes de la escala).
+
+El porcentaje de error típicamente viene dado por:
+
+$$p_t = 100 \frac{e_t}{y_t}, t \in T$$
+  
+siendo $e_t$ el error cometido en el pronóstico en el instante $t$, $y_{t}$ el valor real conocido.
+
+La medida más utilizada es el MAPE, que definimos más adelante.
+
+
+Las medidas basadas en errores de porcentaje tienen la desventaja de ser infinitas o indefinidas si $y_{t}=0$ para algún $t$ en el período de interés, y tener valores extremos si algún  $y_{t}$ está próximo a 0.
+
+También tienen la desventaja de que imponen una mayor penalización a los errores negativos que a los positivos. Esta observación condujo al uso del llamado MAPE "simétrico" (sMAPE) propuesto por [@armstrong1985long], que no obstante, no utilizamos en nuestro reporte.
+
+
+Hechas las aclaraciones anteriores, que nos permitirán interpretar mejor los resultados, describimos ahora cada una de las métricas utilizadas [@hyndman2006another]:
+
+* **ME (error medio)** es la media de los errores cometidos en el conjunto de pronósticos. 
+
+$$ ME = mean(e_t), t\in T $$
+
+
+* **MAE (error absoluto medio)** es la media de los errores absolutos cometidos en el conjunto de pronósticos. 
+
+$$ MAE = mean(|e_t|), t\in T $$
+
+* **RMSE (raiz del error cuadrático medio)** es la raíz cuadrada de la media de los errores cuadráticos cometidos en el conjunto de pronósticos. 
+
+$$ RMSE = \sqrt{\text{mean}(e_t^2)}, t\in T $$
+
+* **MPE (error porcentual medio)** es la media de los errores porcentuales cometidos en el conjunto de pronósticos.
+
+$$ MPE = mean(p_t), t\in T $$
+
+* **MAPE (error porcentual absoluto medio)** es la media de los errores porcentuales absolutos cometidos en el conjunto de pronósticos. 
+
+$$ MAPE = mean(|p_t|), t\in T $$
+
+

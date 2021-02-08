@@ -1,0 +1,170 @@
+
+
+```{r, include=F}
+require(TFFutils)
+require(magrittr)
+require(DBI)
+require(RMySQL)
+require(padr)
+require(imputeTS)
+require(keras)
+require(xts)
+require(ggplot2)
+require(reshape2)
+require(tidyr)
+require(broom)
+require(lubridate)
+require(forecast)
+require(jsonlite)
+require(data.table)
+require(dplyr)
+require(gridExtra) 
+require(stringr)
+require(grid) 
+require(parallel)
+require(kableExtra)
+tff.setup.knitr()
+tff.setup.pander()
+
+knitr::opts_chunk$set(fig.align='center')
+```
+ 
+ 
+
+## Mejores métodos por familia
+
+Tal como comentábamos en el apartado anterior, para una mejor exposición de los resultados, sobre todo pensando en las gráficas, conviene en primer lugar seleccionar el experimento que mejor rendimiento ha ofrecido en el grupo o la familia a la que pertenece.
+
+En ocasiones ocurre que dados dos métodos de los probados, aunque el número de series en el que se han puesto a prueba es muy elevado (cercano a la totalidad de las series que se estudian en este trabajo), es posible que para una o varias series concretas sólo uno de los métodos haya sido probado. Por eso, para la comparación de rendimientos y selección del mejor método, siempre se considera el rendimiento en aquellas series en las que todos los métodos han sido experimentados.
+
+Conviene aclarar que, aunque se han registrado los 192 (2 días cada 15 minutos) pronósticos de cada método, para la presentación en cuadros de los resultados sólo se utilizarán los pronósticos para horizontes de 1 hora vista, 4 horas vista, 12 horas vista, 24 horas vista y 48 horas vista.
+
+<!-- Por otra parte, para esta selección se han cosiderado sólo los experimentos realizados en aquellas series cuyo porcentaje de fallas es relativamente bajo; aquellas que tienen menos del 10% de fallas. No obstante,  -->
+<!-- # filter(d %in% (gaps %>% filter(percentageNAs<10) %>% .$device %>% unique))  -->
+
+
+
+```{r, include=FALSE}
+tff.release.pool()
+
+exps <- tff.get.conn() %>% dbGetQuery("select * from experiments_new where error=''") %>% 
+    right_join(tff.metodos[,c("Funcion","Nombre", "Familia")], by=c('name'='Funcion')) %>% 
+    mutate(Device=d) %>% 
+    select(Device, Familia, Nombre, ME, RMSE, MAE, MPE, MAPE, expected, predicted)
+
+gaps <- tff.get.conn() %>% dbGetQuery("select * from carga_gaps") 
+
+horizons <- c(1,4,12,24,48)*4
+```
+
+
+
+
+Veamos primero el método que mejor rendimiento ofrece en la familia ARIMA. En el Cuadro \@ref(tab:mejor-arima) vemos claramente que el mejor rendimiento lo ofrece el método **SARIMA** (ARIMA estacional). 
+
+
+En el Cuadro \@ref(tab:mejor-stl) revisamos los rendimientos para la familia de métodos basada en la descomposición STL. Vemos claramente que el mejor rendimiento lo ofrece el método **STL W Reciente** (STL con estacionalidad semanal ajustado en los 6 meses de datos previos al punto de pronóstico). 
+
+
+En el Cuadro \@ref(tab:mejor-stlm) revisamos los rendimientos para la familia de métodos basada en la descomposición STLM (STL considerando la multiestacionalidad de las series). Vemos  que el mejor rendimiento lo ofrece el método **STLM DWM Reciente** (STLM con estacionalidades diaria, semanal y mensual ajustado en los 6 meses de datos previos al punto de pronóstico).  
+
+
+En el Cuadro \@ref(tab:mejor-lstm) revisamos los rendimientos para la familia de métodos basada en redes neuronales de tipo LSTM. Vemos  que el mejor rendimiento lo ofrece el método **LSTM Agg4 Scale SD** (LSTM entrenado con los datos de las 8 semanas más recientes, transformando la serie a granularidad de una hora y escalando con centro la media y escala la desviación típica de la serie). 
+
+
+
+En el Cuadro \@ref(tab:mejor-mixto) revisamos los rendimientos para la familia de métodos MIXTO STL LSTM basada en redes neuronales de tipo LSTM aplicadas a los residuos de utilizar STL. Vemos que los rendimientos son muy similares aunque es sutilmente mejor el método  **STL+LSTM Agg5 Scale Mean** (Método mixto. Ajuste STL a 6 meses de datos más recientes de la serie considerando estacionalidad semanal. Posteriormente, los residuos de STL se modelan con LSTM  transformando la serie a granularidad de 75 minutos). 
+
+Y por último comprobamos los distintos experimentos realizados con redes neuronales utilizando además variables exógenas. En el Cuadro \@ref(tab:mejor-exo) podemos ver que la diferencia no es muy grande pero el mejor método es  **LSTM-Exo DH Raw Scale Mean** (LSTM entrenado con los datos de las 8 semanas más recientes, incorporando la hora del día y el día de la semana como variables exógenas y escalando con centro y escala la media). 
+```{r, include=FALSE}
+errs.arima <- tff.best.by.family(exps, horizons, "ARIMA")
+```
+
+```{r mejor-arima, fig.pos='H'}
+errs.arima %>% 
+    tff.kable.scaled(., digits = 2, 
+    caption = "RMSE y MAPE para la familia de experimentos basados en ARIMA con horizonte de pronóstico a 1, 4, 12, 24 y 48 horas") %>% 
+    add_header_above(c(" " = 1, "RMSE" = 5, "MAPE" = 5)) # %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+
+
+```{r, include=FALSE}
+errs.stl <- tff.best.by.family(exps, horizons, "^STL ")
+```
+
+```{r mejor-stl, fig.pos='H'}
+errs.stl %>% 
+    tff.kable.scaled(., digits = 2, 
+    caption = "RMSE y MAPE para la familia de experimentos basados en STL con horizonte de pronóstico a 1, 4, 12, 24 y 48 horas") %>% 
+    add_header_above(c(" " = 1, "RMSE" = 5, "MAPE" = 5)) # %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+
+```{r, include=FALSE}
+errs.stlm <- tff.best.by.family(exps, horizons, "^STLM")
+```
+
+```{r mejor-stlm, fig.pos='H'}
+errs.stlm %>% 
+    tff.kable.scaled(., digits = 2, 
+    caption = "RMSE y MAPE para la familia de experimentos basados en STLM con horizonte de pronóstico a 1, 4, 12, 24 y 48 horas") %>% 
+    add_header_above(c(" " = 1, "RMSE" = 5, "MAPE" = 5))  # %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+
+
+```{r, include=FALSE}
+errs.lstm <- tff.best.by.family(exps, horizons, "^LSTM ")
+```
+
+```{r mejor-lstm, fig.pos='H'}
+errs.lstm %>% 
+    tff.kable.scaled(., digits = 2, 
+    caption = "RMSE y MAPE para la familia de experimentos basados en LSTM con horizonte de pronóstico a 1, 4, 12, 24 y 48 horas") %>% 
+    add_header_above(c(" " = 1, "RMSE" = 5, "MAPE" = 5)) # %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+
+
+```{r, include=FALSE}
+errs.mixto <- tff.best.by.family(exps, horizons, "^STL\\+LSTM")
+```
+
+```{r mejor-mixto, fig.pos='H'}
+errs.mixto %>% 
+    tff.kable.scaled(., digits = 2, 
+    caption = "RMSE y MAPE para la familia de experimentos basados en MIXTO con horizonte de pronóstico a 1, 4, 12, 24 y 48 horas") %>% 
+    add_header_above(c(" " = 1, "RMSE" = 5, "MAPE" = 5)) # %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+
+```{r, include=FALSE}
+errs.exo <- tff.best.by.family(exps, horizons, "^LSTM-Exo")
+```
+
+```{r mejor-exo, fig.pos='H'}
+errs.exo %>% 
+    tff.kable.scaled(., digits = 2, 
+    caption = "RMSE y MAPE para la familia de experimentos basados en LSTM Exógeno con horizonte de pronóstico a 1, 4, 12, 24 y 48 horas") %>% 
+    add_header_above(c(" " = 1, "RMSE" = 5, "MAPE" = 5)) # %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+Por lo tanto, podemos recopilar las tablas de resultados anteriores enumerando los mejores métodos por familias. Estos métodos serán los que comparemos entre sí en los siguientes apartados. Son los que se enumeran en el Cuadro \@ref(tab:top-by-family).
+
+```{r top-by-family, fig.pos='H'}
+tribble(~Familia, ~Método,
+        "ARIMA", "SARIMA",
+        "LSTM", "LSTM Agg4 Scale SD",
+        "LSTM Exógeno", "LSTM-Exo DH Raw Scale Mean",
+        "MIXTO STL LSTM", "STL+LSTM Agg5 Scale Mean",
+        "STL", "STL W Reciente",
+        "STLM", "STLM DWM Reciente") %>% 
+    tff.kable.default(caption = "Mejor método por familia") # %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+

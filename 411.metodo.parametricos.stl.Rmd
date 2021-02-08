@@ -1,0 +1,99 @@
+
+```{r, include = FALSE}
+require(TFFutils)
+require(magrittr)
+require(DBI)
+require(RMySQL)
+require(padr)
+require(imputeTS)
+require(keras)
+require(xts)
+require(ggplot2)
+require(reshape2)
+require(broom)
+require(lubridate)
+require(forecast)
+require(jsonlite)
+require(data.table)
+require(dplyr)
+require(gridExtra) 
+require(grid) 
+require(parallel)
+require(kable)
+require(kableExtra)
+require(tidyr)
+require(png)
+tff.setup.knitr()
+tff.setup.pander()
+```
+
+
+## Método STL con estacionalidad única
+
+**STL** es un método versátil y robusto para descomponer series temporales. STL es un acrónimo de "Descomposición estacional y de tendencias con Loess", siendo Loess un método para estimar relaciones no lineales. El método STL fue desarrollado por Cleveland, McRae y Terpenning [@cleveland1990stl] .
+
+En el lenguaje *R* podemos realizar una descomposición *stl* utilizando el paquete *stats*. Es importante notar que **este método no permite series con estacionalidad múltiple**. Más adelante veremos otros métodos que sí permiten series que presentan varios patrones de estacionalidad.
+
+Los dos parámetros principales que se deben elegir cuando se usa **STL** son la ventana del ciclo-tendencia (t.window) y la ventana estacional (s.window). Estos parámetros controlan la rapidez con la que pueden cambiar las componentes de tendencia y estacionalidad. Valores pequeños permiten cambios más rápidos y valores grandes producen modelos con cambios más moderados en estas componentes. Ambos t.window y s.window deben ser números impares; 
+
+* t.window es el número de observaciones consecutivas que se utilizarán al estimar la tendencia-ciclo.
+* s.window es el número de períodos consecutivos que se utilizarán para estimar cada valor en la componente estacional. 
+
+Si bien la descomposición es principalmente útil para estudiar datos de las series y para explorar cambios históricos a lo largo del tiempo, también se puede utilizar para pronosticar.
+
+Para utilizar la descomposición STL para hacer pronósticos se procede del siguiente modo:
+
+* la componente estacional se pronostica tomando la observación correspondiente del periodo inmediatamente anterior
+* la componente compuesta por tendencia y ruido se suele pronosticar por cualquier algoritmo no estacional 
+
+Afortunadamente, el paquete *forecast* de *R* realiza todo este trabajo de forma transparente. 
+
+Hemos desarrollado una buena batería de funciones que permiten contrastar de forma rápida los pronósticos según distintos algoritmos y representar visualmente los resultados. Utilizando estas funciones y considerando los datos reportados en 2018 por el dispositivo 4.000, podemos poner a prueba la capacidad de pronóstico del algoritmo STL. 
+
+En la Figura \@ref(fig:stl-4000-ex-1) observamos pronósticos realizados considerando la serie con estacionalidad *diaria, semanal, mensual* y *anual*. Hemos hecho pruebas considerando todos los datos reportados por el dispositivo (133.302 valores) y también considerando únicamente los últimos datos recientes valores de la serie (20.000 valores).
+
+Nótese como los pronósticos basados en estacionalidad diaria son bastante menos acertados para días de fin de semana; se entiende que el modelo tiende a acomodarse al comportamiento mayoritario día a día (5 días laborables a la semana son más del doble que 2 días no laborables). Esta tara vemos como queda bastante mejor corregida en el caso del modelo ajustado teniendo en cuenta estacionalidad semanal.
+
+```{r}
+data.4000 <- tff.get.parsed.metrics(d = 4000) %>% tff.clean %>% tff.pad %>% na.interpolation %>% 
+    .[,c("fecha","carga")] %>% head(nrow(.) - 4*24*3) # le quito 3 dias para que caiga en viernes
+pool::poolClose(tff.get.conn())
+
+model.stl.d <- function(train) train %>% tff.as.ts(4*24) %>% stl(s.window = "periodic")
+fit.stl.d <- data.4000 %>% tff.fit(model.stl.d, test.size = 4*48)
+fit.stl.d.tail <- data.4000 %>% tail(20000) %>% tff.fit(model.stl.d, test.size = 4*48)
+
+model.stl.w <- function(train) train %>% tff.as.ts(4*24*7) %>% stl(s.window = "periodic")
+fit.stl.w <- data.4000 %>% tff.fit(model.stl.w, test.size = 4*48)
+fit.stl.w.tail <- data.4000 %>% tail(20000) %>% tff.fit(model.stl.w, test.size = 4*48)
+
+model.stl.m <- function(train) train %>% tff.as.ts(4*24*365.25/12) %>% stl(s.window = "periodic")
+fit.stl.m <- data.4000 %>% tff.fit(model.stl.m, test.size = 4*48)
+fit.stl.m.tail <- data.4000 %>% tail(20000) %>% tff.fit(model.stl.m, test.size = 4*48)
+
+model.stl.y <- function(train) train %>% tff.as.ts(4*24*365.25) %>% stl(s.window = "periodic")
+fit.stl.y <- data.4000 %>% tff.fit(model.stl.y, test.size = 4*48)
+```
+
+
+```{r stl-4000-ex-1, fig.height=11, fig.width=9, fig.cap="Ejemplo de pronósticos a 48 horas vista con el algoritmo STL para la serie reportada por el dispositivo 4.000 utilizando estacionalidad diaria, semanal, mensual o anual, considerando toda la serie o sólamente los 20.000 valores más recientes de la misma"}
+
+grid.arrange (tff.plot.fit(fit.stl.d, include = 4*48*2) + ggtitle('Estacionalidad diaria'),
+              tff.plot.fit(fit.stl.d.tail, include = 4*48*2) + ggtitle('Estacionalidad diaria - datos recientes'),
+              tff.plot.fit(fit.stl.w, include = 4*48*2) + ggtitle('Estacionalidad semanal'),
+              tff.plot.fit(fit.stl.w.tail, include = 4*48*2) + ggtitle('Estacionalidad semanal - datos recientes'),
+              tff.plot.fit(fit.stl.m, include = 4*48*2) + ggtitle('Estacionalidad mensual'),
+              tff.plot.fit(fit.stl.m.tail, include = 4*48*2) + ggtitle('Estacionalidad mensual - datos recientes'),
+              tff.plot.fit(fit.stl.y, include = 4*48*2) + ggtitle('Estacionalidad anual'),
+              ncol = 2) # then we could save it as a png
+```
+
+
+
+Visualmente vemos que los resultados son mejorables aunque es difícil determinar qué tipo de estacionalidad, diaria o semanal, ofrece mejor rendimiento de pronóstico. **Las estacionalidades mensual y anual  claramente se delatan como no apropiadas** (seguramente por no coincidir el patrón mensual o anual con el semanal, que es el más influyente en el caso del flujo de tráfico).
+
+Más tarde, en el apartado de resultados, veremos la capacidad de pronóstico de este algoritmo comparada con el resto de métodos que ponemos a prueba en este trabajo.
+
+
+
+

@@ -1,0 +1,39 @@
+
+# Planteamiento del problema
+
+## Objetivos
+
+Nos planteamos tres objetivos en este trabajo.
+
+En primer lugar, queremos recopilar todos los datos históricos que publica el Ayuntamiento de Madrid relacionados con el flujo de tráfico de la ciudad y almacenarlos de manera que puedan ser utilizados fácilmente por herramientas informáticas en un formato común independientemente de la estructura como se han ido publicando a lo largo del tiempo.
+
+En segundo lugar, utilizando los datos anteriores, queremos determinar cuál es la propiedad más significativa de estos datos, en términos de ser interpretada de forma natural con el estado de flujo de la vía. Y una vez determinada esta propiedad queremos predecir su valor a diferentes horizontes de pronóstico que van desde los 15 minutos hasta las 48 horas mediante el uso de métodos de pronóstico paramétricos clásicos.
+
+Una vez el objetivo anterior se haya cumplido, queremos poner a prueba los métodos de pronóstico basados en redes neuronales y comprobar si su capacidad predictiva puede compararse o mejorar a los métodos paramétricos clásicos basados en el estudio de tendencias y estacionalidades.
+
+
+## Metodología
+
+
+Lo primero ha sido realizar una revisión del estado del arte en materia de predicción de flujo de tráfico. Se han leído decenas de trabajos y se han seleccionado los que más relevancia puedan tener para este estudio. De la lectura detallada de esta selección se ha realizado una propuesta inicial de métodos a utilizar y estos métodos se han estudiado en detalle.
+
+De especial utilidad ha sido la lectura de algunas fuentes, en particular casi cualquier trabajo publicado por el profesor Rob J. Hyndman, pero muy concretamente el documento [@Forecast6-online].
+
+Se ha realizado posteriormente una revisión exhaustiva de la documentación relativa al conjunto de datos que publica el Ayuntamiento de Madrid. Se han explorado los archivos de datos a lo largo del tiempo. Se ha comprobado que no siempre las propiedades de los archivos de datos publicados  han tenido el mismo nombre o los archivos en sí, la misma estructura. Se ha realizado un procesamiento de todos los archivos de manera que la información se ha guardado en una base de datos consultable y operable de forma cómoda con garantías de que se han curado todos lo errores de origen.
+
+Se ha tenido especial cuidado de que todo el código utilizado por los procesos y algoritmos de esta investigación quede guardado y que todos los experimentos o tratamientos realizados puedan ser consultados o reproducidos. 
+
+Para la redacción de la memoria en la que se plasman estas investigaciones se han utilizado  librerías de programación que permiten escribir textos científicos al mismo tiempo que se ejecuta código y se visualizan los resultados. Es difícil explicar con palabras la utilidad que para este menester puede tener el paquete *bookdown* [@R-bookdown] del lenguaje *R* [@R-base]. En el momento en el que se publique este documento, todo este trabajo estará consultable de forma pública en los repositorios Github de *Andrés Mañas* [@amanas-github]. 
+
+De la revisión de la literatura indicada más arriba, y teniendo en cuenta la naturaleza estacional y multiestacional de las series objeto de estudio, se han seleccionado los métodos paramétricos más prometedores por su naturaleza teórica. Se ha desarrollado una librería *R* para la realización de las pruebas de manera que quede totalmente abstraída la implementación del método respecto de la serie sobre la que se aplica. De este modo, para una misma serie en un mismo punto, se han podido aplicar y medir las capacidades de todos los métodos puestos a prueba. Esta librería es perfectamente reutilizable para otros métodos futuros que se quieran poner a prueba.
+
+Según las indicaciones del punto anterior, todos los métodos se han aplicado en todas las series objeto de estudio (más de 4.500, como veremos después) en un mismo punto de prueba, siendo el punto de prueba variable en cada serie, elegido de forma aleatoria pero el mismo para cualquier método aplicado a la serie. De esta manera aseguramos que no siempre se intenta predecir lo mismo en el mismo sitio de manera que se garantiza la generalidad y la validez de los resultados evitándose sesgos que pudieran producirse por predecir siempre en el mismo día de la semana, en el mismo mes o a la misma hora. 
+
+Todos los resultados arrojados por todos los experimentos (más de 80.000 experimentos) junto con los valores pronosticados por cada experimento a 48 horas vistas a intervalos de 15 minutos se han guardado en una base de datos, de manera que puede realizarse cómodamente cualquier análisis posterior sin necesidad de repetir los experimentos.
+
+Se han medido también los tiempos de ejecución de cada método, valor que permite comparar los distintos algoritmos también en términos de consumo de recursos.
+
+Con todos estos datos se han reportado los resultados, segmentando por diferentes subconjuntos de las series originales según la calidad de los datos de la serie. No obstante, se podría segmentar por cualquier otra propiedad por la que se puedan etiquetar las series.
+
+
+<!-- ## Breve justificación de la bibliografía utilizada -->

@@ -1,0 +1,106 @@
+
+```{r, include=F}
+require(TFFutils)
+require(magrittr)
+require(DBI)
+require(RMySQL)
+require(padr)
+require(imputeTS)
+require(keras)
+require(xts)
+require(ggplot2)
+require(reshape2)
+require(tidyr)
+require(broom)
+require(lubridate)
+require(forecast)
+require(jsonlite)
+require(data.table)
+require(dplyr)
+require(gridExtra) 
+require(grid) 
+require(parallel)
+require(kableExtra)
+tff.setup.knitr()
+tff.setup.pander()
+
+knitr::opts_chunk$set(fig.align='center')
+```
+ 
+ 
+# Resultados
+
+
+Uno de los objetivos fundamentales del presente trabajo es poner a prueba distintos métodos y algoritmos de pronóstico de series temporales para predecir el flujo de tráfico con los datos reportados por los dispositivos de medida de la ciudad de Madrid.
+
+Como hemos visto en los capítulos anteriores, se han utilizado métodos paramétricos, basados en el modelado de series temporales  descomponiéndolas en componentes de tendencia y estacionalidad, métodos basados en autorregresión y media móviles, y métodos basados en aprendizaje profundo (deep learning).
+
+Concretamente, se han puesto a prueba los métodos que pueden verse en la siguiente lista. Para cada uno podemos ver una pequeña descripción de su implementación. Para los detalles exactos del método, se recomienda acudir al repositorio [@amanas-github]. Podemos ver que cada experimento viene etiquetado con la familia de métodos a la que pertenece. Esto nos permitirá más adelante seleccionar el mejor de cada familia y expresar los resultados de una forma más clara o resumida atendiendo sólo al método que mejor rinde por familia. Los métodos son:
+
+
+<!-- # ```{r exps-fam-name-desc-tab, include=F} -->
+<!-- # tff.release.pool() -->
+<!-- # tff.metodos %>% select(Familia, Nombre, Descripcion) %>% arrange(Familia, Nombre) %>% -->
+<!-- #     tff.kable.default(caption = "Métodos probados en el presente estudio: familia, nombre y descripción") -->
+<!-- # ``` -->
+
+
+* Familia ARIMA:
+    * **AUTO ARIMA**. Método ARIMA ajustado automáticamente en cada serie.
+    * **SARIMA**. Método ARIMA estacional.
+
+* Familia LSTM:
+    * **LSTM Agg4 Diff**. LSTM entrenado con los datos de las 8 semanas más recientes, transformando la serie a granularidad de una hora y  diferenciando.
+    * **LSTM Agg4 Diff Scale Mean**.	LSTM entrenado con los datos de las 8 semanas más recientes, transformando la serie a granularidad de  una hora, diferenciando y escalando con centro y escala la media.
+    * **LSTM Agg4 Scale Mean**. LSTM entrenado con los datos de las 8 semanas más recientes, transformando la serie a granularidad de una  hora y escalando con centro y escala la media.
+    * **LSTM	LSTM Agg4 Scale SD**. LSTM entrenado con los datos de las 8 semanas más recientes, transformando la serie a granularidad de una hora y  escalando con centro la media y escala la desviación típica de la serie.
+
+* Familia LSTM Exógeno:	
+    * **LSTM-Exo DH Agg5 Scale Mean**. LSTM entrenado con los datos de las 8 semanas más recientes, incorporando la hora del día y el día de la semana como variables exógenas, transformando la serie a granularidad de 75 minutos y escalando con centro y escala la media.
+    * **LSTM-Exo DH Raw Scale Mean**. LSTM entrenado con los datos de las 8 semanas más recientes, incorporando la hora del día y el día de la semana como variables exógenas y escalando con centro y escala la media.
+
+* Familia MIXTO STL LSTM:	
+    * **STL+LSTM Agg5 Scale Mean**. Ajuste STL a 6 meses de datos más recientes de la serie considerando estacionalidad semanal. Posteriormente, los residuos de STL se modelan con LSTM transformando la serie a granularidad de 75 minutos.
+    * **STL+LSTM Raw Scale Mean**. Ajuste STL a 6 meses de datos más recientes de la serie considerando estacionalidad  semanal. Posteriormente, los residuos de STL se modelan con LSTM transformando la serie a granularidad de 1 hora y escalando con centro y escala la media.
+
+* Familia STL:	
+    * **STL D**. STL con estacionalidad diaria ajustado en toda la serie.
+    * **STL D Reciente**. STL con estacionalidad diaria ajustado en los 6 meses de datos previos al punto de pronóstico.
+    * **STL M**. STL con estacionalidad mensual ajustado en toda la serie.
+    * **STL M Reciente**. STL con estacionalidad mensual ajustado en los 6 meses de datos previos al punto de pronóstico.
+    * **STL W**. STL con estacionalidad semanal ajustado en toda la serie.
+    * **STL W Reciente**. STL con estacionalidad semanal ajustado en los 6 meses de datos previos al punto de pronóstico.
+    * **STL Y**. STL con estacionalidad anual ajustado en toda la serie.
+
+* Familia STLM:
+    * **STLM DW**. STLM con estacionalidades diaria y semanal ajustado en toda la serie.
+    * **STLM DWM**. STLM con estacionalidades diaria, semanal y mensual ajustado en toda la serie.
+    * **STLM DWM Reciente**. STLM con estacionalidades diaria, semanal y mensual ajustado en los 6 meses de datos previos al punto de  pronóstico.
+    * **STLM DWY**.	STLM con estacionalidades diaria, semanal y anual ajustado en toda la serie.
+
+
+
+```{r, include=FALSE}
+tff.release.pool()
+dispositivos <- "select count(distinct d) from experiments_new where error = ''" %>% dbGetQuery(tff.get.conn(), .) %>% .[1,1]
+```
+
+La forma de realizar el experimento de contraste ha sido aplicar los distintos algoritmos puestos a prueba a todas las series de tiempo y comparar los resultados pronosticados por cada algoritmo contra la serie conocida real. En número de dispositivos de los que se tienen datos suficientes como para practicar estos experimentos es `r format(dispositivos, big.mark = '.', decimal.mark = ',')`. Esto nos permite confiar en que los promedios de error de cada algoritmo realmente serán significativos de su capacidad de modelado y pronóstico. 
+
+Igualmente, el punto de prueba para cada serie se ha elegido aleatoriamente en el intervalo de los últimos 12 meses de datos de la serie, lo que nos libera de posibles sesgos que se pudieran producir por seleccionar siempre puntos en un mismo día del año o de la semana o a una misma hora del día. Recordemos, que como explicábamos más arriba, todos los métodos aplicados a una serie se han aplicado sobre el mismo instante aleatorio en los 12 meses más recientes. Pero este instante no tiene por qué ser el mismo (y no lo es) para todas las series.
+
+Cada algoritmo de los probados ofrece pronósticos a 48 horas vista con una granularidad de 15 minutos. Esto nos permite someterlos a contraste según diferentes horizontes de pronóstico. En el Cuadro \@ref(tab:exps-by-method-tab) podemos ver el número de experimentos válidos realizados por cada método de los que citábamos en la lista de anterior.
+
+```{r exps-by-method-tab}
+tff.release.pool()
+"select name, count(*) as 'Experimentos realizados' from experiments_new where error='' group by 1 order by 2 desc" %>% 
+  dbGetQuery(tff.get.conn(), .) %>% right_join(tff.metodos, by=c('name'='Funcion')) %>%
+  select(Familia, Nombre, `Experimentos realizados`) %>% arrange(Familia, Nombre) %>% 
+  tff.kable.default(caption = "Número de experimentos realizados por cada método") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+
+**En los próximos apartados, siempre que hablemos del error cometido por cualquier método para un horizonte $h$, nos referimos al agregado de errores cometidos entre en el intervalo de predicciones que van desde el primer valor pronosticado hasta el $h$-ésimo valor pronosticado.** Es importante tener esto muy presente para la interpretación de los resultados que veremos a continuación.
+

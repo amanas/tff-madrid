@@ -1,0 +1,77 @@
+
+```{r setup, include = FALSE}
+require(TFFutils)
+require('padr')
+require('xts')
+require('lubridate')
+require('forecast')
+require('ggplot2')
+require('gridExtra')
+require('magrittr')
+require('grid')
+require(png)
+
+tff.setup.knitr()
+tff.setup.pander()
+knitr::opts_chunk$set(fig.width=6, fig.height=4, out.width='60%', fig.align='center')
+```
+
+
+## Análisis exploratorio de la propiedad carga
+
+Es importante determinar de forma heurística el patrón estacional que puedan presentar los datos que vamos a estudiar. De especial ayuda son los gráficos de representación polar para esta tarea.
+
+Con esta finalidad se han explorado las series de carga reportadas por varios dispositivos. En la Figura \@ref(fig:4000-multi-seasonal) pueden verse las distintas estacionalidades que presenta la propiedad carga para uno de estos dispositivos, sirviendo de generalidad para lo observado en el resto de ellos.
+
+```{r}
+metrics <- tff.get.parsed.metrics(d = 4000)
+pool::poolClose(tff.get.conn())
+metrics.clean <- metrics %>% tff.clean %>% tff.pad %>% .[fecha<as.POSIXct("2018-10-27 00:00:00"),]
+
+tff.hourly.mean <- function(df) df %>% tff.as.xts %>% period.apply(endpoints(., "hours"), mean, na.rm = T) %>% as.data.frame
+g.hourly <- metrics.clean %>%  tff.hourly.mean %>%  tail(24*7) %>% tff.as.ts(24) %>%
+    ggseasonplot(polar=T, year.labels=T, year.labels.left=T, labelgap=0.04, main=NULL, xlab = "Estacionalidad diaria")
+
+tff.daily.mean <- function(df) df %>% tff.as.xts %>% period.apply(endpoints(., "days"), mean, na.rm = T) %>% as.data.frame
+g.daily <- metrics.clean %>%  tff.daily.mean %>%  tail(7*4) %>% tff.as.ts(7) %>%
+    ggseasonplot(polar=T, year.labels=T, year.labels.left=T, labelgap=0.04, main=NULL,  xlab = "Estacionalidad semanal")
+
+tff.monthly.mean <- function(df) df %>% tff.as.xts %>% period.apply(endpoints(., "months"), mean, na.rm = T) %>% as.data.frame
+g.monthly <- metrics.clean %>%  tff.monthly.mean %>%  tff.as.ts(12) %>%
+    ggseasonplot(polar=T, year.labels=T, year.labels.left=T, labelgap=0.04, main=NULL, xlab = "Estacionalidad anual")
+```
+
+```{r 4000-multi-seasonal, fig.cap="Gráfico de diferentes estacionalidades de la carga (dispositivo 4000)", fig.width=9, fig.height=3.5, out.width='100%'}
+grid.arrange(g.hourly, g.daily, g.monthly, ncol=3,
+             top = NULL)
+```
+
+Podemos observar que las series tiene componentes estacionales diarias, semanales y anuales; circunstancia por otro lado bastante natural dada la relación directa entre el flujo de tráfico de una ciudad y el calendario por el que se gobierna la actividad humana.
+
+
+## Fallas en los datos
+
+La mayoría de los algoritmos de modelado y pronóstico de series temporales requieren de datos que no tengan fallas. 
+
+Para tener una idea de lo significativas que pueden llegar a ser estas anomalías en los datos tomados por los dispositivos, podemos observar por ejemplo las medidas tomadas por el dispositivo 10.329 en la primera semana de Julio de 2.018 en la Figura \@ref(fig:gaps-10329).
+
+```{r gaps-10329, fig.cap="Fallas en los datos informados por el dispositivo 10.329 en Julio de 2018"}
+data.xts <- tff.get.parsed.metrics(d=10329) %>% tff.clean %>% tff.pad %>% tff.as.xts
+pool::poolClose(tff.get.conn())
+data.xts$carga["2018-07-06/2018-07-10"] %>% 
+    autoplot(.) + labs(x="Fecha", y="% carga", title="Fallas en los datos de carga")
+```
+
+
+Dependiendo del tipo de algoritmo utilizado en cada caso, se ha seleccionado la técnica más conveniente para la reparación de estas fallas. Por ahora, para el estudio exploratorio de la propiedad *carga* (principalmente en lo relativo a su estacionalidad) hemos utilizado técnicas muy sencillas, como acarrear el último valor conocido o **interpolar con los valores extremos**.
+
+Es importante tener en cuenta, que para fallas grandes no será fácil reparar los datos de una manera no nociva. Tarea ésta que por otro lado supone un área de investigación y que excede los límites de este trabajo.
+
+
+
+
+
+
+
+
+

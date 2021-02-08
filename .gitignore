@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Rprofile
+.Rproj.user/
+_bookdown_files/
+tff-madrid.Rmd
+cache

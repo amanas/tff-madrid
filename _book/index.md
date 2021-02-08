@@ -1,0 +1,23 @@
+--- 
+# title: "Notas sobre pronóstico del flujo de tráfico en la ciudad de Madrid"
+# author: "Andrés Mañas Mañas"
+# date: "2019-06-16"
+# description: |
+#     Investigación con el objetivo de pronosticar los flujos de tráfico en la ciudad de Madrid. 
+#     
+#     El resultado de esta investigación será utilizado como Trabajo Fin de Máster para \"Máster Universitario en Inteligencia Artificial Avanzada: Fundamentos, Métodos y Aplicaciones\" que curso en la UNED.
+documentclass: book
+bibliography: [book.bib]
+biblio-style: apalike
+link-citations: yes
+colorlinks: yes
+lot: yes
+lof: yes
+toc: yes
+# monofont: "Source Code Pro"
+# monofontoptions: "Scale=0.7"
+# fontsize: 12pt
+geometry: "left=3.5cm, right=3.5cm, top=2.5cm, bottom=2.5cm"
+site: bookdown::bookdown_site
+---
+ 

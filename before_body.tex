@@ -1,0 +1,95 @@
+
+\frontmatter
+
+\begin{titlepage}
+
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}} % Defines a new command for the horizontal lines, change thickness here
+
+\center % Center everything on the page
+
+%----------------------------------------------------------------------------------------
+%	HEADING SECTIONS
+%----------------------------------------------------------------------------------------
+
+\textsc{\large }\\[1cm] % Minor heading such as course title
+
+\textsc{\LARGE UNIVERSIDAD NACIONAL DE EDUCACIÓN A DISTANCIA}\\[1cm] % Name of your university/college
+\textsc{\Large MÁSTER UNIVERSITARIO EN I. A. AVANZADA: FUNDAMENTOS, MÉTODOS Y APLICACIONES}\\[1cm] % Major heading such as course name
+\textsc{\large Escuela Técnica Superior de Ingeniería Informática}\\[2cm] % Minor heading such as course title
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+
+\HRule \\[0.4cm]
+{ \huge \bfseries Notas sobre pronóstico del flujo de tráfico en la ciudad de Madrid}\\[0.4cm] % Title of your document
+\HRule \\[1.5cm]
+
+%----------------------------------------------------------------------------------------
+%	AUTHOR SECTION
+%----------------------------------------------------------------------------------------
+
+\begin{minipage}{0.4\textwidth}
+\begin{flushleft} \large
+\emph{Autor:}\\
+Andrés \textsc{Mañas Mañas} % Your name
+\end{flushleft}
+\end{minipage}
+~
+\begin{minipage}{0.4\textwidth}
+\begin{flushright} \large
+\emph{Supervisor:} \\
+Dr. José Luis \textsc{Aznarte Mellado} % Supervisor's Name
+\end{flushright}
+\end{minipage}\\[2cm]
+
+% If you don't want a supervisor, uncomment the two lines below and remove the section above
+%\Large \emph{Author:}\\
+%John \textsc{Smith}\\[3cm] % Your name
+
+%----------------------------------------------------------------------------------------
+%	DATE SECTION
+%----------------------------------------------------------------------------------------
+
+{\large \today}\\[2cm] % Date, change the \today to a set date if you want to be precise
+
+%----------------------------------------------------------------------------------------
+%	LOGO SECTION
+%----------------------------------------------------------------------------------------
+
+\includegraphics{images/university}\\[1cm] % Include a department/university logo - this will require the graphicx package
+
+%----------------------------------------------------------------------------------------
+
+\vfill % Fill the rest of the page with whitespace
+
+\end{titlepage}
+
+
+
+\chapter*{Resumen}
+
+La capacidad para pronosticar el flujo de tráfico en un entorno operativo es una necesidad crítica de los sistemas de transporte inteligentes (ITS). En particular, la predicción del volumen de tráfico es un factor clave para su control dinámico y proactivo.
+
+Esta investigación compara el rendimiento de diferentes modelos utilizando los datos históricos reales reportados por los dispositivos de medida de tráfico de la ciudad de Madrid. Se han medido los rendimientos de pronóstico de los distintos modelos para diferentes horizontes de predicción, desde los 15 minutos hasta las 48 horas.
+
+Se han probado 21 modelos para el pronóstico de flujo de tráfico en Madrid, 11 de ellos basados en la descomposición de tendencia y estacionalidad de la serie de flujo (7 con estacionalidad simple y 4 con estacionalidad múltiple), 1 basado en el método ARIMA, 1 basado en el método SARIMA (ARIMA estacional), 6 basados en redes neuronales recurrentes y 2 basados en un método Mixto STL+LSTM .
+
+Una componente importante de esta investigación ha sido determinar si para este tipo de series temporales los modelos basados en aprendizaje profundo pueden compararse o mejorar en rendimiento a los modelos paramétricos.
+
+Los resultados de la investigación muestran que este tipo de serie temporal puede predecirse con bastante precisión y que efectivamente los métodos basados en redes neuronales ofrecen resultados perfectamente comparables a los métodos paramétricos. Sin embargo, el algoritmo basado en redes neuronales no llega a superar de manera significativa al método basado en la descomposición en tendencia y estacionalidad de la serie.
+
+Para el desarrollo de esta investigación se han realizado intensos esfuerzos de recopilación de datos y de saneamiento de los mismos dado que algunas series padecen de fallas en sus datos bastantes significativas. Se han medido los resultados segmentando por la calidad de los datos de la serie, viéndose que en términos medios los algoritmos se comportan igual independientemente de considerar o no este factor.
+
+
+\chapter*{Agradecimientos}
+
+
+Es difícil resumir en unas líneas la cantidad de esfuerzo, tiempo y dedicación que hay detrás de las páginas que componen este trabajo. No ha sido fácil y hemos tenido que superar algunos baches y dificultades que llegaron a parecer casi insalvables.
+
+Nada habría sido posible sin la comprensión y el constante apoyo del Dr. José Luis Arnarte Mellado. La empatía que ha ofrecido ante la adversidad, la generosidad con la que ha permitido que la investigación evolucione sin ataduras y el optimismo y confianza que siempre ha manifestado han sido fundamentales. Gracias, José Luis.
+
+Pero nada de esto habría sido posible sin la comprensión de mi familia. Laura, María, Montse, sois mi vida. Os debo todo el tiempo de varias primaveras, que a vuestro lado es la única estación que compone los años. Las palabras felicidad y alegría sólo se escriben si es con vosotras. Os quiero más que a nada.
+
+
+\mainmatter
